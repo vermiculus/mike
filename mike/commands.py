@@ -115,6 +115,8 @@ def deploy(cfg, version, title=None, aliases=[], update_aliases=False,
         commit.add_file(versions_to_file_info(all_versions, deploy_prefix))
         commit.add_file(make_nojekyll())
 
+        cfg.plugins['mike'].run_hook('pre_commit', config=cfg, commit=commit, deploy_prefix=deploy_prefix)
+
 
 def delete(identifiers=None, all=False, *, branch='gh-pages', message=None,
            allow_empty=False, deploy_prefix=''):

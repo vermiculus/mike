@@ -100,6 +100,7 @@ def load_mkdocs_config(args, strict=False):
         maybe_set(args, cfg, 'remote', 'remote_name')
         maybe_set(args, plugin.config, 'alias_type')
         maybe_set(args, plugin.config, 'template', 'redirect_template')
+        maybe_set(args, plugin.config, 'hooks')
         maybe_set(args, plugin.config, 'deploy_prefix')
         return cfg
     except FileNotFoundError as e:

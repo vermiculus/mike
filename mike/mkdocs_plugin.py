@@ -1,5 +1,7 @@
+import functools
 import importlib_metadata as metadata
 import os
+from collections import defaultdict
 from urllib.parse import urljoin
 from mkdocs.config import config_options as opts
 from mkdocs.plugins import BasePlugin
@@ -31,8 +33,26 @@ class MikePlugin(BasePlugin):
         ('version_selector', opts.Type(bool, default=True)),
         ('canonical_version', opts.Type((str, type(None)), default=None)),
         ('css_dir', opts.Type(str, default='css')),
+        ('hooks', opts.ListOfItems(opts.File(exists=True), default=None)),
         ('javascript_dir', opts.Type(str, default='js')),
     )
+
+    @functools.lru_cache(maxsize=None)
+    def _load_hook(self, path):
+        import sys, os
+        import importlib.util
+
+        name = os.path.relpath(path)
+
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None:
+            raise ValidationError(f"Cannot import path '{path}' as a Python module")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        if spec.loader is None:
+            raise ValidationError(f"Cannot import path '{path}' as a Python module")
+        spec.loader.exec_module(module)
+        return module
 
     @classmethod
     def default(cls):
@@ -47,6 +67,24 @@ class MikePlugin(BasePlugin):
             if self.config['canonical_version'] is not None:
                 version = self.config['canonical_version']
             config['site_url'] = urljoin(config['site_url'], version)
+
+        self.events = defaultdict(list)
+
+        files = config.plugins['mike'].config['hooks']
+        modules = [self._load_hook(f) for f in files]
+        for m in modules:
+            for member_name in dir(m):
+                member = getattr(m, member_name)
+                if callable(member) and member_name.startswith('on_'):
+                    if member_name == 'on_pre_commit':
+                        self.events['pre_commit'].append(member)
+                    else:
+                        raise Exception(f"hook not supported: {member_name} in {m.__file__}")
+
+    def run_hook(self, event, **kwargs):
+        if event in self.events:
+            for func in self.events[event]:
+                func(**kwargs)
 
     def on_files(self, files, config):
         if not self.config['version_selector']:
